@@ -1,0 +1,10 @@
+[project]
+name = "sourcegraph-code-nav-intent-gate"
+version = "0.0.1"
+description = "Scaffold: Code Nav Intent Gate (independent Sourcegraph lens)"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

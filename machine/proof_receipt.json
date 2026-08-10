@@ -1,0 +1,31 @@
+{
+  "schema": "glaciereq.proof-receipt.v1",
+  "repository": "GlacierEQ/sourcegraph-code-nav-intent-gate",
+  "source_sha": "e3d0eba36c00e211064613c3964e398ef4dc10076abadbce83711abf73164ce4",
+  "proof_id": "elite-sourcegraph-code-nav-intent-gate-1786356701",
+  "environment": {
+    "python": "/Users/kcbflux/.local/bin/python3.11",
+    "PYTHONPATH": "/Users/kcbflux/GlacierEQ_Swarm/job-app/repos/sourcegraph-code-nav-intent-gate:/Users/kcbflux/GlacierEQ_Swarm/job-app/repos/sourcegraph-code-nav-intent-gate/src",
+    "entry": "unittest"
+  },
+  "tests": [
+    "/Users/kcbflux/.local/bin/python3.11 -m unittest discover -s tests -v (x2)"
+  ],
+  "adversarial_tests": [
+    "tests/test_adversarial.py"
+  ],
+  "runtime": {
+    "operate": "scripts/operate.py (x2)",
+    "dual_run_ok": true,
+    "proof_dual_run_ok": true
+  },
+  "result": "PASS",
+  "limitations": [
+    "not production deployed",
+    "reference implementation only"
+  ],
+  "timestamp": "2026-08-10T10:11Z",
+  "artifact_hashes": {
+    "operability_receipt": "bef5dce520d2c06a1bf26232838f1f4726e1c31d6edd080f7afbe0ade18065ea"
+  }
+}

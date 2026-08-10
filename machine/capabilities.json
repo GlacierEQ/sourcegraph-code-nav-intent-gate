@@ -1,0 +1,12 @@
+{
+  "schema": "glaciereq.repo-capabilities.v1",
+  "repository": "GlacierEQ/sourcegraph-code-nav-intent-gate",
+  "capabilities": [
+    {
+      "id": "code-nav-intent-gate",
+      "name": "Code Nav Intent Gate",
+      "status": "SCAFFOLD",
+      "module": "src/code_nav_intent_gate.py"
+    }
+  ]
+}
