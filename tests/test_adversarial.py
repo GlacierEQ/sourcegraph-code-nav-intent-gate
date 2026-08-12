@@ -1,154 +1,178 @@
 from __future__ import annotations
-import importlib
-import inspect
-import unittest
-import sys
-from pathlib import Path
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "src"))
 
-class AdversarialEliteTests(unittest.TestCase):
-    def _load(self):
-        errors = []
-        for name in ('code_nav_intent_gate', "src." + 'code_nav_intent_gate'):
-            try:
-                return importlib.import_module(name)
-            except Exception as e:
-                errors.append(f"{name}: {e}")
-        self.fail("; ".join(errors))
+import pytest
 
-    def test_module_importable(self):
-        mod = self._load()
-        public = [n for n in dir(mod) if not n.startswith("_")]
-        self.assertGreater(len(public), 0, "module exposes no public names")
+from code_nav_intent_gate import (
+    CodeNavIntentGate,
+    CodeNavIntentGateRequest,
+    Decision,
+    NavigationSchemaError,
+)
 
-    def test_refuse_bad_import_path_does_not_shadow(self):
-        with self.assertRaises(ModuleNotFoundError):
-            importlib.import_module("src.__elite_does_not_exist_" + 'code_nav_intent_gate')
 
-    def test_central_mechanism_refuse_or_edge(self):
-        """Exercise shipped refuse/edge paths when present; never crash open."""
-        mod = self._load()
-        exercised = False
+NOW = 1_800_000_000.0
 
-        # plan(connector, action) refuse nonsense connector
-        for cname, cls in inspect.getmembers(mod, inspect.isclass):
-            if cname.startswith("_"):
-                continue
-            # include re-exported central classes (not pure stdlib typing)
-            mname = getattr(cls, "__module__", None) or ""
-            if mname.startswith("typing") or mname in {"builtins", "collections", "pathlib", "json", "sys", "os"}:
-                continue
-            if getattr(mod, cname, None) is not cls and mname not in {mod.__name__, getattr(mod, "__package__", None)}:
-                continue
-            try:
-                sig = inspect.signature(cls)
-                if any(
-                    p.default is inspect.Parameter.empty and p.name != "self"
-                    and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
-                    for p in sig.parameters.values()
-                ):
-                    continue
-                inst = cls()
-            except Exception:
-                continue
-            plan = getattr(inst, "plan", None)
-            if callable(plan):
-                try:
-                    out = plan("__elite_no_such_connector__", "delete")
-                    self.assertIsNotNone(out)
-                    if isinstance(out, dict):
-                        # refuse should not silently allow destructive unknown work
-                        allowed = out.get("allowed")
-                        if allowed is True:
-                            self.assertTrue(
-                                out.get("human_approved") is True
-                                or out.get("status") in {"REFUSED", "DENIED", "ERROR", "UNKNOWN"},
-                                f"plan allowed unknown connector: {out!r}",
-                            )
-                        exercised = True
-                    else:
-                        exercised = True
-                except Exception as e:
-                    # hard fail-closed is acceptable refuse
-                    exercised = True
-                    self.assertIsInstance(e, Exception)
-            # authorize/decide refuse
-            for meth in ("authorize", "decide", "check"):
-                fn = getattr(inst, meth, None)
-                if not callable(fn):
-                    continue
-                try:
-                    ps = inspect.signature(fn)
-                    req = [
-                        p for p in ps.parameters.values()
-                        if p.name != "self" and p.default is inspect.Parameter.empty
-                        and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
-                    ]
-                    if req:
-                        continue
-                    out = fn()
-                    self.assertIsNotNone(out)
-                    exercised = True
-                except TypeError:
-                    continue
-                except Exception:
-                    exercised = True
 
-        # module-level schedule([]) / health edges
-        sched = getattr(mod, "schedule", None)
-        if callable(sched):
-            try:
-                out = sched([], 1.0)
-                self.assertIsInstance(out, dict)
-                self.assertIn("plan", out)
-                exercised = True
-            except TypeError:
-                try:
-                    out = sched([])
-                    self.assertIsNotNone(out)
-                    exercised = True
-                except Exception:
-                    exercised = True
-            except Exception:
-                exercised = True
+def _graph():
+    return {
+        "nodes": [
+            {"id": "a", "repository": "r/app"},
+            {"id": "b", "repository": "r/app"},
+            {"id": "c", "repository": "r/app"},
+            {"id": "x", "repository": "other/lib"},
+        ],
+        "edges": [
+            {"from": "a", "to": "b", "kind": "calls"},
+            {"from": "b", "to": "c", "kind": "calls"},
+            {"from": "b", "to": "x", "kind": "calls"},
+        ],
+    }
 
-        for edge_fn, args in (
-            ("anomaly_score", (1e9,)),
-            ("thermal_margin", (-40.0,)),
-            ("simulate_rack", (0, 0.0)),
-        ):
-            fn = getattr(mod, edge_fn, None)
-            if not callable(fn):
-                continue
-            try:
-                out = fn(*args)
-                self.assertIsNotNone(out)
-                exercised = True
-            except Exception:
-                exercised = True
 
-        # metrics / efficiency attributes on zero-arg engines
-        for cname, cls in inspect.getmembers(mod, inspect.isclass):
-            if cname.startswith("_"):
-                continue
-            try:
-                inst = cls()
-            except Exception:
-                continue
-            metrics = getattr(inst, "metrics", None)
-            if isinstance(metrics, dict) and metrics:
-                self.assertIn(next(iter(metrics)), metrics)
-                exercised = True
-                break
+def _evaluate(intent, graph=None, *, budget=10):
+    return CodeNavIntentGate().evaluate(
+        CodeNavIntentGateRequest(
+            subject_id="nav",
+            payload={"graph": graph or _graph(), "intent": intent},
+            budget=budget,
+        ),
+        now=NOW,
+    )
 
-        if not exercised:
-            # last resort: public API still rejects nonsense attribute assignment theater
-            public = [n for n in dir(mod) if not n.startswith("_")]
-            self.assertGreater(len(public), 0)
-            with self.assertRaises((AttributeError, TypeError, ImportError, ValueError, KeyError)):
-                getattr(mod, "__elite_missing_surface__")
 
-if __name__ == "__main__":
-    unittest.main()
+def test_missing_hop_or_node_budget_cannot_run_unbounded() -> None:
+    receipt = _evaluate(
+        {
+            "start_nodes": ["a"],
+            "allowed_edge_kinds": ["calls"],
+            "allowed_repositories": ["r/app"],
+        }
+    )
+    assert receipt.decision is Decision.REFUSE
+    assert "navigation_budget_missing_or_invalid" in receipt.reasons
+
+
+def test_missing_explicit_edge_kind_scope_is_rejected() -> None:
+    receipt = _evaluate(
+        {
+            "start_nodes": ["a"],
+            "allowed_repositories": ["r/app"],
+            "max_hops": 2,
+            "max_nodes": 4,
+        }
+    )
+    assert receipt.decision is Decision.REFUSE
+    assert "allowed_edge_kinds_missing" in receipt.reasons
+
+
+def test_start_node_cannot_begin_outside_repository_scope() -> None:
+    receipt = _evaluate(
+        {
+            "start_nodes": ["x"],
+            "allowed_edge_kinds": ["calls"],
+            "allowed_repositories": ["r/app"],
+            "max_hops": 2,
+            "max_nodes": 4,
+        }
+    )
+    assert receipt.decision is Decision.REFUSE
+    assert "start_node_repository_not_allowed:x" in receipt.reasons
+
+
+def test_unknown_target_refuses_instead_of_silently_returning_empty() -> None:
+    receipt = _evaluate(
+        {
+            "start_nodes": ["a"],
+            "target_nodes": ["missing"],
+            "allowed_edge_kinds": ["calls"],
+            "allowed_repositories": ["r/app"],
+            "max_hops": 2,
+            "max_nodes": 4,
+        }
+    )
+    assert receipt.decision is Decision.REFUSE
+    assert "target_node_unknown:missing" in receipt.reasons
+
+
+def test_graph_edge_referencing_unknown_node_is_schema_error() -> None:
+    graph = _graph()
+    graph["edges"].append({"from": "a", "to": "ghost", "kind": "calls"})
+    receipt = _evaluate(
+        {
+            "start_nodes": ["a"],
+            "allowed_edge_kinds": ["calls"],
+            "allowed_repositories": ["r/app"],
+            "max_hops": 2,
+            "max_nodes": 4,
+        },
+        graph,
+    )
+    assert receipt.decision is Decision.REFUSE
+    assert any("references_unknown_node" in reason for reason in receipt.reasons)
+
+
+def test_duplicate_node_identity_is_rejected() -> None:
+    graph = _graph()
+    graph["nodes"].append({"id": "a", "repository": "r/app"})
+    receipt = _evaluate(
+        {
+            "start_nodes": ["a"],
+            "allowed_edge_kinds": ["calls"],
+            "allowed_repositories": ["r/app"],
+            "max_hops": 2,
+            "max_nodes": 4,
+        },
+        graph,
+    )
+    assert receipt.decision is Decision.REFUSE
+    assert "node_duplicate:a" in receipt.reasons
+
+
+def test_invalid_direction_is_rejected_at_compile_time() -> None:
+    with pytest.raises(NavigationSchemaError, match="direction_invalid"):
+        CodeNavIntentGate._normalize_intent(
+            {
+                "start_nodes": ["a"],
+                "allowed_edge_kinds": ["calls"],
+                "allowed_repositories": ["r/app"],
+                "direction": "sideways",
+                "max_hops": 1,
+                "max_nodes": 2,
+            }
+        )
+
+
+def test_expected_intent_digest_detects_query_scope_mutation() -> None:
+    twin = CodeNavIntentGate()
+    original = twin._normalize_intent(
+        {
+            "start_nodes": ["a"],
+            "target_nodes": ["b"],
+            "allowed_edge_kinds": ["calls"],
+            "allowed_repositories": ["r/app"],
+            "max_hops": 2,
+            "max_nodes": 4,
+        }
+    )
+    changed = {
+        "start_nodes": ["a"],
+        "target_nodes": ["b"],
+        "allowed_edge_kinds": ["calls"],
+        "allowed_repositories": ["r/app", "other/lib"],
+        "max_hops": 2,
+        "max_nodes": 4,
+    }
+    receipt = twin.evaluate(
+        CodeNavIntentGateRequest(
+            subject_id="nav",
+            payload={
+                "graph": _graph(),
+                "intent": changed,
+                "expected_intent_digest": original["intent_digest"],
+            },
+            budget=10,
+        ),
+        now=NOW,
+    )
+    assert receipt.decision is Decision.REFUSE
+    assert "intent_digest_mismatch" in receipt.reasons
