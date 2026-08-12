@@ -1,7 +1,7 @@
 [project]
 name = "sourcegraph-code-nav-intent-gate"
-version = "0.0.1"
-description = "Scaffold: Code Nav Intent Gate (independent Sourcegraph lens)"
+version = "1.0.0"
+description = "Deterministic intent-bounded code graph navigation with auditable receipts"
 requires-python = ">=3.11"
 dependencies = []
 
