@@ -1,22 +1,27 @@
 {
-  "schema": "glaciereq.repo-target-contract.v1",
+  "schema": "glaciereq.repo-target-contract.v2",
   "identity": {
     "repository_id": "GlacierEQ/sourcegraph-code-nav-intent-gate",
-    "family": "elite-estate"
+    "canonical_role": "intent-bound-code-navigation-kernel"
   },
+  "purpose": "Execute code-graph navigation only within explicit intent, hop, node, and work budgets and produce deterministic receipts.",
   "current": {
-    "state": "PROMOTED",
+    "state": "FUNCTIONAL",
     "implemented": true,
     "tested": true,
-    "deployed": false
+    "runtime_demonstrated": true,
+    "packaged": true,
+    "deployment": "NOT_APPLICABLE_LIBRARY"
   },
-  "nonclaims": [
-    "no employer affiliation",
-    "no production deployment without receipt"
+  "consumers": [
+    "Python library clients",
+    "installed code-nav-intent CLI",
+    "code-intelligence agents feeding indexed graphs"
   ],
-  "donor_plan": {
-    "mode": "none",
-    "donors": []
-  },
-  "frozen_at": "2026-08-10T10:11Z"
+  "nonclaims": [
+    "no Sourcegraph affiliation",
+    "no proprietary Sourcegraph access",
+    "no production Sourcegraph deployment claimed"
+  ],
+  "remaining_material_gaps": []
 }

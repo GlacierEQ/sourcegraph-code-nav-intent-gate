@@ -1,12 +1,42 @@
 {
-  "schema": "glaciereq.repo-capabilities.v1",
+  "schema": "glaciereq.repo-capabilities.v2",
   "repository": "GlacierEQ/sourcegraph-code-nav-intent-gate",
+  "status": "FUNCTIONAL",
   "capabilities": [
     {
-      "id": "code-nav-intent-gate",
-      "name": "Code Nav Intent Gate",
-      "status": "SCAFFOLD",
-      "module": "src/code_nav_intent_gate.py"
+      "id": "bounded-path",
+      "name": "Bounded shortest-path navigation",
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "callers",
+      "name": "Caller discovery via reverse graph",
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "callees",
+      "name": "Callee discovery",
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "references",
+      "name": "Reference discovery",
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "budgets",
+      "name": "Hop, node, work-unit, and authority bounds",
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "receipts",
+      "name": "Deterministic traversal receipts and graph fingerprint",
+      "status": "IMPLEMENTED"
+    },
+    {
+      "id": "cli",
+      "name": "Installed JSON CLI",
+      "status": "IMPLEMENTED"
     }
   ]
 }

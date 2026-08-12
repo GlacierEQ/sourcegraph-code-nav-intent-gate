@@ -2,6 +2,7 @@ name: tests
 on:
   push:
   pull_request:
+
 jobs:
   pytest:
     runs-on: ubuntu-latest
@@ -11,5 +12,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
+      - run: python -m pip install --no-build-isolation .
       - run: python -m pytest -q
       - run: python scripts/operate.py
+      - name: installed CLI smoke
+        shell: bash
+        run: |
+          printf '%s' '{"subject_id":"ci","budget":10,"payload":{"graph":{"A":["B"],"B":[]},"intent":"PATH","start":"A","goal":"B","max_hops":1,"max_nodes":4}}' \
+            | code-nav-intent > /tmp/code-nav-intent.json
+          python -c 'import json; d=json.load(open("/tmp/code-nav-intent.json")); assert d["decision"] == "ALLOW"; assert d["result"]["path"] == ["A","B"]'

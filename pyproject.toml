@@ -1,9 +1,20 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "sourcegraph-code-nav-intent-gate"
-version = "0.0.1"
-description = "Scaffold: Code Nav Intent Gate (independent Sourcegraph lens)"
+version = "1.0.0"
+description = "Intent-bound bounded code-graph navigation with deterministic receipts"
 requires-python = ">=3.11"
 dependencies = []
+
+[project.scripts]
+code-nav-intent = "code_nav_intent_gate:cli"
+
+[tool.setuptools]
+py-modules = ["code_nav_intent_gate"]
+package-dir = {"" = "src"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

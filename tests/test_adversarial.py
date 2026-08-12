@@ -1,154 +1,66 @@
 from __future__ import annotations
-import importlib
-import inspect
-import unittest
-import sys
-from pathlib import Path
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "src"))
 
-class AdversarialEliteTests(unittest.TestCase):
-    def _load(self):
-        errors = []
-        for name in ('code_nav_intent_gate', "src." + 'code_nav_intent_gate'):
-            try:
-                return importlib.import_module(name)
-            except Exception as e:
-                errors.append(f"{name}: {e}")
-        self.fail("; ".join(errors))
+from code_nav_intent_gate import CodeNavIntentGate, CodeNavIntentGateRequest, Decision
 
-    def test_module_importable(self):
-        mod = self._load()
-        public = [n for n in dir(mod) if not n.startswith("_")]
-        self.assertGreater(len(public), 0, "module exposes no public names")
+GRAPH = {"A": ["B"], "B": ["C"], "C": []}
 
-    def test_refuse_bad_import_path_does_not_shadow(self):
-        with self.assertRaises(ModuleNotFoundError):
-            importlib.import_module("src.__elite_does_not_exist_" + 'code_nav_intent_gate')
 
-    def test_central_mechanism_refuse_or_edge(self):
-        """Exercise shipped refuse/edge paths when present; never crash open."""
-        mod = self._load()
-        exercised = False
+def base(**payload_changes):
+    payload = {
+        "graph": GRAPH,
+        "intent": "PATH",
+        "start": "A",
+        "goal": "C",
+        "max_hops": 2,
+        "max_nodes": 10,
+        **payload_changes,
+    }
+    return CodeNavIntentGateRequest(subject_id="adv", payload=payload, budget=10)
 
-        # plan(connector, action) refuse nonsense connector
-        for cname, cls in inspect.getmembers(mod, inspect.isclass):
-            if cname.startswith("_"):
-                continue
-            # include re-exported central classes (not pure stdlib typing)
-            mname = getattr(cls, "__module__", None) or ""
-            if mname.startswith("typing") or mname in {"builtins", "collections", "pathlib", "json", "sys", "os"}:
-                continue
-            if getattr(mod, cname, None) is not cls and mname not in {mod.__name__, getattr(mod, "__package__", None)}:
-                continue
-            try:
-                sig = inspect.signature(cls)
-                if any(
-                    p.default is inspect.Parameter.empty and p.name != "self"
-                    and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
-                    for p in sig.parameters.values()
-                ):
-                    continue
-                inst = cls()
-            except Exception:
-                continue
-            plan = getattr(inst, "plan", None)
-            if callable(plan):
-                try:
-                    out = plan("__elite_no_such_connector__", "delete")
-                    self.assertIsNotNone(out)
-                    if isinstance(out, dict):
-                        # refuse should not silently allow destructive unknown work
-                        allowed = out.get("allowed")
-                        if allowed is True:
-                            self.assertTrue(
-                                out.get("human_approved") is True
-                                or out.get("status") in {"REFUSED", "DENIED", "ERROR", "UNKNOWN"},
-                                f"plan allowed unknown connector: {out!r}",
-                            )
-                        exercised = True
-                    else:
-                        exercised = True
-                except Exception as e:
-                    # hard fail-closed is acceptable refuse
-                    exercised = True
-                    self.assertIsInstance(e, Exception)
-            # authorize/decide refuse
-            for meth in ("authorize", "decide", "check"):
-                fn = getattr(inst, meth, None)
-                if not callable(fn):
-                    continue
-                try:
-                    ps = inspect.signature(fn)
-                    req = [
-                        p for p in ps.parameters.values()
-                        if p.name != "self" and p.default is inspect.Parameter.empty
-                        and p.kind not in (p.VAR_POSITIONAL, p.VAR_KEYWORD)
-                    ]
-                    if req:
-                        continue
-                    out = fn()
-                    self.assertIsNotNone(out)
-                    exercised = True
-                except TypeError:
-                    continue
-                except Exception:
-                    exercised = True
 
-        # module-level schedule([]) / health edges
-        sched = getattr(mod, "schedule", None)
-        if callable(sched):
-            try:
-                out = sched([], 1.0)
-                self.assertIsInstance(out, dict)
-                self.assertIn("plan", out)
-                exercised = True
-            except TypeError:
-                try:
-                    out = sched([])
-                    self.assertIsNotNone(out)
-                    exercised = True
-                except Exception:
-                    exercised = True
-            except Exception:
-                exercised = True
+def test_cannot_request_absurd_hop_ceiling():
+    gate = CodeNavIntentGate()
+    r = gate.evaluate(base(max_hops=10_000))
+    assert r.decision is Decision.REFUSE
+    assert "max_hops_out_of_range" in r.reasons
 
-        for edge_fn, args in (
-            ("anomaly_score", (1e9,)),
-            ("thermal_margin", (-40.0,)),
-            ("simulate_rack", (0, 0.0)),
-        ):
-            fn = getattr(mod, edge_fn, None)
-            if not callable(fn):
-                continue
-            try:
-                out = fn(*args)
-                self.assertIsNotNone(out)
-                exercised = True
-            except Exception:
-                exercised = True
 
-        # metrics / efficiency attributes on zero-arg engines
-        for cname, cls in inspect.getmembers(mod, inspect.isclass):
-            if cname.startswith("_"):
-                continue
-            try:
-                inst = cls()
-            except Exception:
-                continue
-            metrics = getattr(inst, "metrics", None)
-            if isinstance(metrics, dict) and metrics:
-                self.assertIn(next(iter(metrics)), metrics)
-                exercised = True
-                break
+def test_cannot_request_absurd_node_ceiling():
+    gate = CodeNavIntentGate()
+    r = gate.evaluate(base(max_nodes=10_000_000))
+    assert r.decision is Decision.REFUSE
+    assert "max_nodes_out_of_range" in r.reasons
 
-        if not exercised:
-            # last resort: public API still rejects nonsense attribute assignment theater
-            public = [n for n in dir(mod) if not n.startswith("_")]
-            self.assertGreater(len(public), 0)
-            with self.assertRaises((AttributeError, TypeError, ImportError, ValueError, KeyError)):
-                getattr(mod, "__elite_missing_surface__")
 
-if __name__ == "__main__":
-    unittest.main()
+def test_unknown_start_refuses():
+    gate = CodeNavIntentGate()
+    r = gate.evaluate(base(start="ROOT_PASSWORD"))
+    assert r.decision is Decision.REFUSE
+    assert "start_unknown" in r.reasons
+
+
+def test_non_boolean_budget_is_rejected():
+    gate = CodeNavIntentGate()
+    q = base()
+    r = gate.evaluate(CodeNavIntentGateRequest(subject_id=q.subject_id, payload=q.payload, budget=True))
+    assert r.decision is Decision.REFUSE
+    assert "budget_invalid" in r.reasons
+
+
+def test_bad_graph_shape_refuses():
+    gate = CodeNavIntentGate()
+    q = base(graph={"A": "B"})
+    r = gate.evaluate(q)
+    assert r.decision is Decision.REFUSE
+    assert "graph_neighbors_invalid" in r.reasons
+
+
+def test_caller_cannot_smuggle_affiliation_or_execution_claim_fields():
+    gate = CodeNavIntentGate()
+    q = base()
+    payload = dict(q.payload)
+    payload["company_affiliation"] = "Sourcegraph"
+    payload["production_verified"] = True
+    r = gate.evaluate(CodeNavIntentGateRequest(subject_id=q.subject_id, payload=payload, budget=10))
+    assert r.decision is Decision.REFUSE
+    assert any(reason.startswith("payload_keys_unknown:") for reason in r.reasons)

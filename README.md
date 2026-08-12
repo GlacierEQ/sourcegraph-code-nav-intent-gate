@@ -1,50 +1,60 @@
 # Code Nav Intent Gate
 
-Independent GlacierEQ portfolio exhibit aligned to **Sourcegraph** operating themes.
+Independent GlacierEQ portfolio system aligned to **Sourcegraph-style code intelligence problems**.
 
 > **Not affiliated.** This repository is not affiliated with, endorsed by, employed by, or deployed at Sourcegraph.
-> No proprietary access, production deployment, customer impact, or company partnership is claimed.
 
-## Bottleneck (GlacierEQ hypothesis)
+## Purpose
 
-Code intelligence agents over-fetch without intent-bound query budgets.
+Bound code-navigation work to an explicit developer/agent intent so graph traversal cannot silently expand into an unbounded repository crawl.
 
-**Brick wall:** Silent success without receipts; affiliation or production claims without evidence.
+## What it does
 
-**Observed public pressure (snapshot hypothesis):** Public market pressure toward AI-enabled products and operators (hypothesis only).
+The runtime accepts a code graph plus a declared navigation intent and executes deterministic bounded traversal:
 
-## Innovation mechanism
+- shortest path discovery between symbols
+- caller discovery through a reverse graph
+- callee discovery
+- reference discovery
+- bounded neighborhood traversal
+- maximum hop and visited-node ceilings
+- explicit work-unit budget
+- authority-expiry checks
+- deterministic graph and decision fingerprints
+- fail-closed rejection of unknown request fields
 
-**Code Nav Intent Gate** — Bind navigation queries to declared intent and hop budgets; refuse unbounded graph walks.
+A successful receipt proves what was traversed, how much graph work occurred, and which limits constrained the operation. A refusal receipt explains exactly which invariant failed.
 
-## Target roles
+## Run
 
-- Applied AI Systems Engineer
-- Forward-Deployed Engineer
+```bash
+python -m pytest -q
+python scripts/operate.py
+```
 
-## Application move
+`operate.py` executes a real five-hop code path lookup and exits non-zero unless the bounded path and receipt verify.
 
-Lead with a small, inspectable Code Nav Intent Gate exhibit and explicit non-affiliation boundary.
+## Core API
 
-## Current scaffold state
+```python
+from code_nav_intent_gate import CodeNavIntentGate, CodeNavIntentGateRequest
 
-This leaf is a **scaffold**: contracts, tests, and a stub mechanism exist so another engineer/AI can fill production-grade code without inventing company affiliation.
+receipt = CodeNavIntentGate().evaluate(
+    CodeNavIntentGateRequest(
+        subject_id="impact-check",
+        payload={
+            "graph": {"api": ["service"], "service": ["database"], "database": []},
+            "intent": "PATH",
+            "start": "api",
+            "goal": "database",
+            "max_hops": 3,
+            "max_nodes": 20,
+        },
+        budget=20,
+    )
+)
+```
 
-| Surface | Path |
-|---------|------|
-| Mechanism stub | `src/code_nav_intent_gate.py` |
-| Operate entry | `scripts/operate.py` |
-| Contract tests | `tests/` |
-| Target contract | `machine/target-contract.json` |
-| **AI fill-in brief** | **`DEV_UP_INSTRUCTIONS.md`** |
-| Issue contract | `ISSUE_CONTRACT.md` |
+## Boundary
 
-## Non-claims
-
-- No Sourcegraph employment, endorsement, proprietary data, or production use
-- No customer, revenue, latency, or scale claims without separate receipts
-- Scaffold tests define **intended behavior**, not verified production excellence
-
-## Next gate
-
-Implement mechanism + positive tests + operate receipt.
+This repository provides the intent-bound navigation kernel. It does not claim access to Sourcegraph infrastructure or proprietary APIs. A production integration can feed this kernel graphs assembled from Sourcegraph, SCIP, LSIF, language servers, or another code-intelligence index.
