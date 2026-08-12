@@ -35,8 +35,8 @@ DEMO = {
         "direction": "outgoing",
         "max_hops": 3,
         "max_nodes": 10,
-        "require_target": true
-    }
+        "require_target": True,
+    },
 }
 
 
