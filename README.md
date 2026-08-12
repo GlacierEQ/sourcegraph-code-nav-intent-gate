@@ -1,50 +1,116 @@
-# Code Nav Intent Gate
+# Code Navigation Intent Engine
 
-Independent GlacierEQ portfolio exhibit aligned to **Sourcegraph** operating themes.
+Independent GlacierEQ portfolio implementation aligned to public Sourcegraph operating themes. This repository is not affiliated with or endorsed by Sourcegraph.
 
-> **Not affiliated.** This repository is not affiliated with, endorsed by, employed by, or deployed at Sourcegraph.
-> No proprietary access, production deployment, customer impact, or company partnership is claimed.
+## Purpose
 
-## Bottleneck (GlacierEQ hypothesis)
+Navigate code-intelligence graphs without allowing an agent to turn a focused question into an unbounded repository crawl.
 
-Code intelligence agents over-fetch without intent-bound query budgets.
+The engine binds every navigation request to explicit intent and resource limits, then performs deterministic graph traversal and emits a receipt showing exactly what was visited, what was skipped, and whether the requested target was reached.
 
-**Brick wall:** Silent success without receipts; affiliation or production claims without evidence.
+## Capabilities
 
-**Observed public pressure (snapshot hypothesis):** Public market pressure toward AI-enabled products and operators (hypothesis only).
+A navigation intent declares:
 
-## Innovation mechanism
+- one or more start nodes
+- optional target nodes
+- allowed edge kinds such as `calls` or `references`
+- allowed repositories
+- traversal direction: `outgoing`, `incoming`, or `both`
+- maximum hop depth
+- maximum node expansions
+- whether reaching a target is mandatory
 
-**Code Nav Intent Gate** — Bind navigation queries to declared intent and hop budgets; refuse unbounded graph walks.
+The request itself also carries a node-expansion budget. An intent cannot silently ask for more traversal than the caller authorized.
 
-## Target roles
+## Fail-closed behavior
 
-- Applied AI Systems Engineer
-- Forward-Deployed Engineer
+The engine refuses:
 
-## Application move
+- missing hop/node budgets
+- missing repository or edge-kind scope
+- unknown start or target nodes
+- start nodes outside repository scope
+- malformed graph edges
+- duplicate node identities
+- invalid traversal direction
+- expired requests
+- mutated intent digests
+- requests whose declared node budget exceeds the caller budget
+- walks that exhaust the node budget
+- required targets that cannot be reached within the declared scope
 
-Lead with a small, inspectable Code Nav Intent Gate exhibit and explicit non-affiliation boundary.
+## Deterministic traversal
 
-## Current scaffold state
+The graph and intent are canonicalized before execution. Adjacency is sorted, traversal uses deterministic breadth-first search, and target paths are reconstructed from the same parent chain every time. Reordering the input nodes or edges does not change the resulting receipt.
 
-This leaf is a **scaffold**: contracts, tests, and a stub mechanism exist so another engineer/AI can fill production-grade code without inventing company affiliation.
+The receipt includes:
 
-| Surface | Path |
-|---------|------|
-| Mechanism stub | `src/code_nav_intent_gate.py` |
-| Operate entry | `scripts/operate.py` |
-| Contract tests | `tests/` |
-| Target contract | `machine/target-contract.json` |
-| **AI fill-in brief** | **`DEV_UP_INSTRUCTIONS.md`** |
-| Issue contract | `ISSUE_CONTRACT.md` |
+- graph digest
+- intent digest
+- evaluation digest
+- visited nodes
+- traversed allowed edges
+- target paths with hop counts
+- maximum depth reached
+- repository-boundary skips
+- edge-kind skips
+- caller node budget
 
-## Non-claims
+## Run it
 
-- No Sourcegraph employment, endorsement, proprietary data, or production use
-- No customer, revenue, latency, or scale claims without separate receipts
-- Scaffold tests define **intended behavior**, not verified production excellence
+```bash
+python scripts/operate.py
+```
 
-## Next gate
+The built-in example navigates a small call graph from an entry function to a storage function under explicit repository, edge, hop, and node limits.
 
-Implement mechanism + positive tests + operate receipt.
+Use your own graph:
+
+```bash
+python scripts/operate.py --input navigation.json --output receipt.json
+```
+
+Example request:
+
+```json
+{
+  "subject_id": "nav-42",
+  "budget": 10,
+  "graph": {
+    "nodes": [
+      {"id": "entry", "repository": "acme/app", "kind": "function", "path": "src/main.py"},
+      {"id": "store", "repository": "acme/app", "kind": "function", "path": "src/store.py"}
+    ],
+    "edges": [
+      {"from": "entry", "to": "store", "kind": "calls"}
+    ]
+  },
+  "intent": {
+    "start_nodes": ["entry"],
+    "target_nodes": ["store"],
+    "allowed_edge_kinds": ["calls"],
+    "allowed_repositories": ["acme/app"],
+    "direction": "outgoing",
+    "max_hops": 3,
+    "max_nodes": 10,
+    "require_target": true
+  }
+}
+```
+
+## Intent drift
+
+The normalized intent has a stable digest. A control plane can persist that digest with the original navigation request and later pass it as `expected_intent_digest`. If repository scope, edge kinds, targets, or traversal budgets mutate, execution refuses.
+
+## Verify behavior
+
+```bash
+python -m pytest -q
+```
+
+Tests cover deterministic paths, hop limits, node-budget exhaustion, request-vs-intent budget enforcement, disallowed edge kinds, repository boundaries, malformed graphs, duplicate nodes, unknown targets, invalid directions, expiry, and silent intent mutation.
+
+## Boundary
+
+This is a vendor-neutral graph-navigation engine and CLI. It does not claim Sourcegraph API access, proprietary code intelligence, customer-scale benchmarks, or hosted deployment. A real Sourcegraph or SCIP/LSIF adapter can supply the graph without changing the bounded traversal mechanism.
